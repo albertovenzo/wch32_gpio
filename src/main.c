@@ -1,5 +1,4 @@
 #include <zephyr/kernel.h>
-#include <zephyr/drivers/adc.h>
 #include <zephyr/sys/printk.h>
 #include <zephyr/drivers/gpio.h>
 
