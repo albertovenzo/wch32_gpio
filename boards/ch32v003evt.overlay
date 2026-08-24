@@ -18,6 +18,10 @@
  
 &tim1 {
   status = "okay";
+  /* prescaler = 0 -> 48 MHz timer clock, matching the known-working
+   * bare-metal SPL reference (PSC=0) instead of the SoC dtsi's default
+   * prescaler of 1 (24 MHz). */
+  prescaler = <0>;
 };
 
 &pwm1 {
