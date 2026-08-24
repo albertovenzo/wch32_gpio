@@ -20,12 +20,23 @@ Files
 
 - ``boards/ch32v003evt.overlay`` - enables ``tim1``/``pwm1``, sets the
   ``TIM1_CH3_PC3`` pinctrl (push-pull, max speed), declares the
-  ``ttl_pwm`` PWM consumer node, and enables the board's ``leds`` node
-  (``led0`` -> PD4).
-- ``src/main.c`` - sweeps the PWM duty cycle and period on ``ttl_pwm``,
-  toggles the PD4 heartbeat GPIO once per loop iteration, and prints a
-  startup message with ``printk()`` (a no-op unless ``serial.conf`` is
-  used).
+  ``ttl_pwm`` PWM consumer node (channel index **2**, since the
+  ``wch,adtm-pwm`` driver numbers channels 0-based: 2 = physical TIM1
+  CH3), overrides ``tim1``'s prescaler to **0** (48 MHz timer clock,
+  matching a known-working bare-metal SPL reference that uses
+  ``PSC=0``, instead of the SoC dtsi's default of 1 / 24 MHz), and
+  enables the board's ``leds`` node (``led0`` -> PD4).
+- ``src/main.c`` - drives ``ttl_pwm`` with a **fixed** 25 us period /
+  12.5 us pulse (50% duty). The values are chosen to land on exactly
+  ``ATRLR=1199``, ``CH3CVR=600`` - bit-for-bit the same timer counts as
+  the bare-metal reference's ``ConfigurePWM(1200-1, 0, 600)`` - so the
+  two firmwares produce a directly comparable signal on a scope. Also
+  toggles the PD4 heartbeat GPIO once per loop iteration, and every ~1s
+  prints TIM1's live ``PSC``/``ATRLR``/``CH3CVR``/``CNT`` registers via
+  ``printk()`` (a no-op unless ``serial.conf`` is used). These are read
+  from the running CPU rather than via a halted debugger, since the
+  counter datapath registers on this chip read back unreliably while
+  the core is halted for debug.
 - ``prj.conf`` - base/release configuration: ``-Os`` size optimization,
   GPIO + PWM enabled, serial/console/printk explicitly disabled (the
   board's defconfig turns them on by default, which doesn't fit this
@@ -40,6 +51,35 @@ Files
 so overflows the 16 KB ROM by ~2.8 KB on this chip. Build with one or
 the other depending on whether you need to single-step/inspect
 variables or need UART output.
+
+Verifying the PWM signal on PC3
+================================
+
+If the PWM signal isn't visible on a scope, first sanity-check the
+overlay: the ``pwms`` cell's channel index is 0-based in the
+``wch,adtm-pwm`` driver, so TIM1 physical channel 3 (routed to PC3 by
+the ``TIM1_CH3_PC3_0`` pinmux) must be addressed as index ``2``, not
+``3``.
+
+If the channel index is already correct, use ``debug.conf`` to attach
+GDB (see *Debugging* below) and inspect TIM1's registers directly.
+With the core halted:
+
+.. code-block:: console
+
+   (gdb) p/x *(uint32_t*)0x40011000   # GPIOC->CFGLR
+   (gdb) p/x *(uint32_t*)0x40010004   # AFIO->PCFR1
+   (gdb) p/x *(uint32_t*)0x40012C00   # TIM1->CTLR1  (expect 0x81: ARPE|CEN)
+   (gdb) p/x *(uint32_t*)0x40012C1C   # TIM1->CHCTLR2 (expect 0x60: OC3M=PWM1)
+   (gdb) p/x *(uint32_t*)0x40012C20   # TIM1->CCER    (expect 0x100: CC3E)
+   (gdb) p/x *(uint32_t*)0x40012C44   # TIM1->BDTR    (expect 0x8000: MOE)
+
+Note that ``PSC``/``ATRLR``/``CNT``/``CHxCVR`` (the live counter
+datapath, at offsets ``0x28``/``0x2C``/``0x24``/``0x3C`` from
+``0x40012C00``) are known to read back unreliably through a halted
+debug probe on this chip. Trust a live ``printk()`` readout (see
+above, enabled via ``serial.conf``) over a GDB read of those specific
+registers.
 
 Building
 ********
