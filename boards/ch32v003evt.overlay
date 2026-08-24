@@ -9,10 +9,11 @@
 
   ttl_pwm: ttl_pwm {
     compatible = "wch,ttl-pwm";
-    pwms = <&pwm1 3 PWM_KHZ(30) PWM_POLARITY_NORMAL>;
+    /* Channel index is 0-based in the wch,adtm-pwm driver: 2 = TIM1 CH3 (PC3). */
+    pwms = <&pwm1 2 PWM_USEC(30) PWM_POLARITY_NORMAL>;
     pwm-names = "ttl";
   };
-  
+
 };
  
 &tim1 {
@@ -32,5 +33,10 @@
     drive-push-pull;
     slew-rate = "max-speed-10mhz";
   };
+};
+
+/* heartbeat toggle on PD4, wired up as led0 by the board's own .dts */
+&{/leds} {
+  status = "okay";
 };
 
