@@ -26,17 +26,27 @@ Files
   matching a known-working bare-metal SPL reference that uses
   ``PSC=0``, instead of the SoC dtsi's default of 1 / 24 MHz), and
   enables the board's ``leds`` node (``led0`` -> PD4).
-- ``src/main.c`` - drives ``ttl_pwm`` with a **fixed** 25 us period /
-  12.5 us pulse (50% duty). The values are chosen to land on exactly
-  ``ATRLR=1199``, ``CH3CVR=600`` - bit-for-bit the same timer counts as
-  the bare-metal reference's ``ConfigurePWM(1200-1, 0, 600)`` - so the
-  two firmwares produce a directly comparable signal on a scope. Also
-  toggles the PD4 heartbeat GPIO once per loop iteration, and every ~1s
-  prints TIM1's live ``PSC``/``ATRLR``/``CH3CVR``/``CNT`` registers via
-  ``printk()`` (a no-op unless ``serial.conf`` is used). These are read
-  from the running CPU rather than via a halted debugger, since the
-  counter datapath registers on this chip read back unreliably while
-  the core is halted for debug.
+- ``src/main.c`` - configures TIM1 channel 3 for a **fixed** 25 us
+  period / 12.5 us pulse (50% duty): ``ATRLR=1199``, ``CH3CVR=600`` -
+  bit-for-bit the same timer counts as the bare-metal reference's
+  ``ConfigurePWM(1200-1, 0, 600)`` - so the two firmwares produce a
+  directly comparable signal on a scope. Rather than calling
+  ``pwm_set_dt()``, ``configure_pwm_vendor_pattern()`` pokes TIM1's
+  registers directly, mirroring the vendor SPL's ``TIM_OC3Init()``
+  ordering exactly: disable the channel output (``CC3E``) first,
+  reconfigure the compare mode and capture/compare-select bits, write
+  the compare value, and only then re-enable the channel - as opposed
+  to the Zephyr PWM driver's read-modify-write, which doesn't bracket
+  the reconfiguration with a disable/enable. This is app-level only
+  (raw register access, see TIM1 offsets in
+  ``modules/hal/wch/ch32fun/ch32v003hw.h``); it does not touch the
+  Zephyr driver. ``main()`` also toggles the PD4 heartbeat GPIO once
+  per loop iteration, and every ~1s prints TIM1's live
+  ``PSC``/``ATRLR``/``CH3CVR``/``CNT`` registers via ``printk()`` (a
+  no-op unless ``serial.conf`` is used). These are read from the
+  running CPU rather than via a halted debugger, since the counter
+  datapath registers on this chip read back unreliably while the core
+  is halted for debug.
 - ``prj.conf`` - base/release configuration: ``-Os`` size optimization,
   GPIO + PWM enabled, serial/console/printk explicitly disabled (the
   board's defconfig turns them on by default, which doesn't fit this
@@ -61,9 +71,13 @@ overlay: the ``pwms`` cell's channel index is 0-based in the
 the ``TIM1_CH3_PC3_0`` pinmux) must be addressed as index ``2``, not
 ``3``.
 
-If the channel index is already correct, use ``debug.conf`` to attach
-GDB (see *Debugging* below) and inspect TIM1's registers directly.
-With the core halted:
+If the channel index is already correct, note that ``src/main.c``
+currently configures TIM1 CH3 via direct register access
+(``configure_pwm_vendor_pattern()``), bypassing the Zephyr PWM driver's
+``pwm_set_dt()`` entirely, to test whether the vendor SPL's exact
+disable/reconfigure/enable register ordering changes anything. Use
+``debug.conf`` to attach GDB (see *Debugging* below) and inspect TIM1's
+registers directly. With the core halted:
 
 .. code-block:: console
 
@@ -97,7 +111,7 @@ Release build (small, no debug/serial features)
 
    west build -b ch32v003evt -d build .
 
-Uses ~69% of ROM (11.3 KB / 16 KB).
+Uses ~59% of ROM (9.7 KB / 16 KB).
 
 Debug build (GDB-friendly, variables not optimized out)
 =========================================================
@@ -106,7 +120,7 @@ Debug build (GDB-friendly, variables not optimized out)
 
    west build -b ch32v003evt -d build . -- -DEXTRA_CONF_FILE=debug.conf
 
-Uses ~90% of ROM (14.7 KB / 16 KB).
+Uses ~88% of ROM (14.5 KB / 16 KB).
 
 Serial build (printk output over USART1, 115200 8N1)
 ========================================================
@@ -115,7 +129,7 @@ Serial build (printk output over USART1, 115200 8N1)
 
    west build -b ch32v003evt -d build . -- -DEXTRA_CONF_FILE=serial.conf
 
-Uses ~91% of ROM (14.8 KB / 16 KB).
+Uses ~81% of ROM (13.2 KB / 16 KB).
 
 Use ``--pristine`` (or ``-p``) when switching between configurations
 in the same build directory, e.g.:
