@@ -65,10 +65,12 @@ With the core halted:
 
 .. code-block:: console
 
-   (gdb) p/x *(uint32_t*)0x40011000   # GPIOC->CFGLR
-   (gdb) p/x *(uint32_t*)0x40010004   # AFIO->PCFR1
+   (gdb) p/x *(uint32_t*)0x40021018   # RCC->APB2PCENR (expect [0]:AFIOEN, [4]:IOPCEN, [11] TIM1EN)
+   (gdb) p/x *(uint32_t*)0x40011000   # GPIOC->CFGLR (expect 0xYYYYBYYY)
    (gdb) p/x *(uint32_t*)0x40012C00   # TIM1->CTLR1  (expect 0x81: ARPE|CEN)
+   (gdb) p/x *(uint32_t*)0x40012C2C   # TIM1->ATRLR (expect 0x4AF)
    (gdb) p/x *(uint32_t*)0x40012C1C   # TIM1->CHCTLR2 (expect 0x60: OC3M=PWM1)
+   (gdb) p/x *(uint32_t*)0x40012C3C   # TIM1->CH3CVR (expect 0x258)
    (gdb) p/x *(uint32_t*)0x40012C20   # TIM1->CCER    (expect 0x100: CC3E)
    (gdb) p/x *(uint32_t*)0x40012C44   # TIM1->BDTR    (expect 0x8000: MOE)
 
