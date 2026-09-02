@@ -18,8 +18,11 @@ static const struct gpio_dt_spec heartbeat = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gp
 #define PERIOD_NS PWM_NSEC(25000)
 #define PULSE_NS  PWM_NSEC(12500)
 
+#define WCH_GPIOC_CFGLR (*(volatile uint32_t *)(0x40011000))
+
 int main(void)
 {
+    WCH_GPIOC_CFGLR = 0x3883B443U;
     if (!device_is_ready(ttl.dev)) {
         return -ENODEV;
     }
